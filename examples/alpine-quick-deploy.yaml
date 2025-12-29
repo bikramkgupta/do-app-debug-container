@@ -1,0 +1,32 @@
+# Alpine Quick Deploy - Minimal Debug Container
+#
+# This is the "Alpine Debug Pattern" from the troubleshooting skill.
+# Deploy in ~45 seconds to isolate infrastructure vs application issues.
+#
+# Use this when you need to quickly determine if an issue is:
+# - Infrastructure/networking (if Alpine also fails, it's infrastructure)
+# - Application-specific (if Alpine works but your app doesn't)
+#
+# Deploy with: doctl apps create --spec alpine-quick-deploy.yaml
+
+name: alpine-debug
+
+workers:
+  - name: alpine
+    image:
+      registry_type: DOCKER_HUB
+      registry: library
+      repository: alpine
+      tag: latest
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    run_command: |
+      apk add --no-cache curl bind-tools netcat-openbsd postgresql-client
+      echo "Debug container ready. Connect via: doctl apps console"
+      tail -f /dev/null
+
+    # Add your database to test connectivity
+    # envs:
+    #   - key: DATABASE_URL
+    #     scope: RUN_TIME
+    #     value: ${db.DATABASE_URL}
