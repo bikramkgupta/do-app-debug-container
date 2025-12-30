@@ -92,6 +92,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # OpenSearch/Elasticsearch - use curl with JSON (REST API, curl + jq is standard)
 
+# -----------------------------------------------------------------------------
+# DigitalOcean CLI (doctl)
+# -----------------------------------------------------------------------------
+RUN DOCTL_VERSION=$(curl -s https://api.github.com/repos/digitalocean/doctl/releases/latest | jq -r '.tag_name' | sed 's/v//') \
+    && curl -sL "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz" -o /tmp/doctl.tar.gz \
+    && tar -xzf /tmp/doctl.tar.gz -C /tmp \
+    && mv /tmp/doctl /usr/local/bin/doctl \
+    && chmod +x /usr/local/bin/doctl \
+    && rm /tmp/doctl.tar.gz
+
 # Create app directory and user
 RUN useradd -m -s /bin/bash debuguser \
     && echo "debuguser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
@@ -106,7 +116,8 @@ COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh 2>/dev/null || true \
     && ln -sf /app/scripts/diagnose.sh /usr/local/bin/diagnose.sh \
     && ln -sf /app/scripts/test-db.sh /usr/local/bin/test-db.sh \
-    && ln -sf /app/scripts/test-connectivity.sh /usr/local/bin/test-connectivity.sh
+    && ln -sf /app/scripts/test-connectivity.sh /usr/local/bin/test-connectivity.sh \
+    && ln -sf /app/scripts/test-spaces.sh /usr/local/bin/test-spaces.sh
 
 # Copy startup script
 COPY scripts/startup.sh /app/startup.sh

@@ -100,6 +100,16 @@ See `app-specs/debug-worker-python.yaml` or `app-specs/debug-worker-node.yaml` f
 - `nmap` - Network exploration
 - `tcpdump` - Packet capture
 
+### DigitalOcean Tools
+
+- `doctl` - DigitalOcean CLI (latest version, auto-updated)
+
+### Spaces (S3-Compatible Storage)
+
+Both images include libraries for DigitalOcean Spaces:
+- Python: `boto3`
+- Node.js: `@aws-sdk/client-s3`
+
 ### System Tools
 
 - `htop`, `ps`, `top` - Process monitoring
@@ -149,6 +159,9 @@ test-db.sh mongodb       # Uses $MONGODB_URI
 test-db.sh kafka         # Uses $KAFKA_BROKERS
 test-db.sh opensearch    # Uses $OPENSEARCH_URL
 
+# Test DigitalOcean Spaces connectivity
+test-spaces.sh           # Uses $SPACES_KEY, $SPACES_SECRET, $SPACES_ENDPOINT
+
 # Test network connectivity
 test-connectivity.sh https://api.example.com
 test-connectivity.sh db.example.com 5432
@@ -183,6 +196,10 @@ When deployed as a service, the container exposes:
 | `MONGODB_URI` | MongoDB connection string | `test-db.sh mongodb` |
 | `KAFKA_BROKERS` | Kafka broker addresses (comma-separated) | `test-db.sh kafka` |
 | `OPENSEARCH_URL` | OpenSearch endpoint URL | `test-db.sh opensearch` |
+| `SPACES_KEY` | Spaces access key | `test-spaces.sh` |
+| `SPACES_SECRET` | Spaces secret key | `test-spaces.sh` |
+| `SPACES_ENDPOINT` | Spaces endpoint (e.g., `nyc3.digitaloceanspaces.com`) | `test-spaces.sh` |
+| `SPACES_BUCKET` | Bucket name (optional) | `test-spaces.sh` |
 
 ## Common Issues & Solutions
 

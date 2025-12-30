@@ -78,6 +78,22 @@ print_database_clients() {
     if command -v curl &> /dev/null && command -v jq &> /dev/null; then
         echo -e "  ${GREEN}✓${NC} OpenSearch  (curl + jq)"
     fi
+
+    # Spaces (S3-compatible)
+    echo -e "  ${GREEN}✓${NC} Spaces      (boto3/aws-sdk)"
+    echo ""
+}
+
+print_tools() {
+    echo -e "${BOLD}INSTALLED TOOLS${NC}"
+    echo -e "─────────────────────────────────────────────────────────────────────────────"
+
+    # doctl
+    if command -v doctl &> /dev/null; then
+        DOCTL_VERSION=$(doctl version 2>/dev/null | head -1 | awk '{print $3}' || echo "installed")
+        echo -e "  ${GREEN}✓${NC} doctl       (v${DOCTL_VERSION})"
+    fi
+
     echo ""
 }
 
@@ -90,6 +106,10 @@ print_diagnostic_scripts() {
     echo -e "  ${CYAN}test-db.sh <type>${NC}"
     echo -e "      Test database connectivity"
     echo -e "      Types: postgres, mysql, redis, mongodb, kafka, opensearch"
+    echo ""
+    echo -e "  ${CYAN}test-spaces.sh${NC}"
+    echo -e "      Test DigitalOcean Spaces connectivity"
+    echo -e "      Requires: SPACES_KEY, SPACES_SECRET, SPACES_ENDPOINT"
     echo ""
     echo -e "  ${CYAN}test-connectivity.sh <url|host> [port]${NC}"
     echo -e "      Test network connectivity to URLs or hosts"
@@ -109,6 +129,9 @@ print_quick_examples() {
     echo -e "  ${YELLOW}test-db.sh kafka${NC}       # Uses \$KAFKA_BROKERS"
     echo -e "  ${YELLOW}test-db.sh opensearch${NC}  # Uses \$OPENSEARCH_URL"
     echo ""
+    echo -e "  # Test Spaces (S3-compatible storage)"
+    echo -e "  ${YELLOW}test-spaces.sh${NC}         # Uses \$SPACES_KEY, \$SPACES_SECRET"
+    echo ""
     echo -e "  # Test network connectivity"
     echo -e "  ${YELLOW}test-connectivity.sh https://api.example.com${NC}"
     echo -e "  ${YELLOW}test-connectivity.sh db.example.com 5432${NC}"
@@ -117,6 +140,10 @@ print_quick_examples() {
     echo -e "  ${YELLOW}psql \$DATABASE_URL${NC}"
     echo -e "  ${YELLOW}redis-cli -u \$REDIS_URL ping${NC}"
     echo -e "  ${YELLOW}mongosh \$MONGODB_URI${NC}"
+    echo ""
+    echo -e "  # DigitalOcean CLI"
+    echo -e "  ${YELLOW}doctl auth init${NC}        # Authenticate with DO API"
+    echo -e "  ${YELLOW}doctl apps list${NC}        # List your apps"
     echo ""
 }
 
@@ -162,9 +189,13 @@ print_detected_env_vars() {
         echo -e "  ${GREEN}✓${NC} OPENSEARCH_URL is set"
         found=true
     fi
+    if [ -n "${SPACES_KEY:-}" ] && [ -n "${SPACES_SECRET:-}" ]; then
+        echo -e "  ${GREEN}✓${NC} SPACES credentials are set"
+        found=true
+    fi
 
     if [ "$found" = false ]; then
-        echo -e "  ${YELLOW}No database connection variables detected${NC}"
+        echo -e "  ${YELLOW}No database/storage connection variables detected${NC}"
         echo -e "  Add them in your App Platform configuration to test connectivity"
     fi
     echo ""
@@ -182,6 +213,7 @@ print_footer() {
 print_banner
 print_runtime_info
 print_database_clients
+print_tools
 print_detected_env_vars
 print_diagnostic_scripts
 print_quick_examples
