@@ -1,0 +1,83 @@
+# DigitalOcean App Platform - Node.js Debug Container
+#
+# Deploy in ~30-45 seconds using pre-built image from GHCR
+#
+# Usage:
+#   doctl apps create --spec app-specs/debug-node.yaml
+#
+# Or add to your existing app spec as a worker/service component
+
+name: debug-node
+
+services:
+  - name: debug
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: debug-node
+      tag: latest
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 8080
+    routes:
+      - path: /
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 5
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+
+    # Uncomment and modify to test connectivity:
+    #
+    # envs:
+    #   #────────────────────────────────────────────────────────────────────
+    #   # DATABASES
+    #   #────────────────────────────────────────────────────────────────────
+    #   # PostgreSQL (DATABASE_URL is the standard for Postgres)
+    #   - key: DATABASE_URL
+    #     scope: RUN_TIME
+    #     value: ${db.DATABASE_URL}
+    #
+    #   # MySQL (use MYSQL_URL to distinguish from Postgres)
+    #   - key: MYSQL_URL
+    #     scope: RUN_TIME
+    #     value: ${mysql.DATABASE_URL}
+    #
+    #   # Redis / Valkey
+    #   - key: REDIS_URL
+    #     scope: RUN_TIME
+    #     value: ${redis.DATABASE_URL}
+    #
+    #   # MongoDB
+    #   - key: MONGODB_URI
+    #     scope: RUN_TIME
+    #     value: "mongodb://user:pass@host:27017/database"
+    #
+    #   # Kafka
+    #   - key: KAFKA_BROKERS
+    #     scope: RUN_TIME
+    #     value: "broker1:9092,broker2:9092"
+    #
+    #   # OpenSearch
+    #   - key: OPENSEARCH_URL
+    #     scope: RUN_TIME
+    #     value: "https://user:pass@opensearch.example.com:9200"
+    #
+    #   #────────────────────────────────────────────────────────────────────
+    #   # SPACES (S3-Compatible Storage)
+    #   #────────────────────────────────────────────────────────────────────
+    #   - key: SPACES_KEY
+    #     scope: RUN_TIME
+    #     value: "your-spaces-access-key"
+    #   - key: SPACES_SECRET
+    #     scope: RUN_TIME
+    #     value: "your-spaces-secret-key"
+    #   - key: SPACES_ENDPOINT
+    #     scope: RUN_TIME
+    #     value: "nyc3.digitaloceanspaces.com"
+    #   - key: SPACES_BUCKET
+    #     scope: RUN_TIME
+    #     value: "your-bucket-name"
