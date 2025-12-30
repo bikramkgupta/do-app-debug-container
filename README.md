@@ -1,190 +1,245 @@
 # DigitalOcean App Platform Debug Container
 
-A comprehensive debugging container for diagnosing connectivity, database, and infrastructure issues in DigitalOcean App Platform deployments.
+Pre-built debug containers for diagnosing connectivity, database, and infrastructure issues in DigitalOcean App Platform. **Deploys in 30-45 seconds** using pre-built images from GitHub Container Registry.
 
 ## Why Use This?
 
-When troubleshooting App Platform issues, you often need to answer questions like:
+When troubleshooting App Platform issues, you need to answer questions like:
 - Can my app reach the database?
 - Is DNS resolving correctly?
-- Are external APIs accessible from within App Platform?
-- What environment variables are available at runtime?
+- Are external APIs accessible?
+- What environment variables are available?
 
-This debug container comes pre-loaded with all the tools you need to answer these questions, eliminating the slow "guess → push → wait 5-7 min → check → repeat" debugging cycle.
+These debug containers come **fully loaded** with all diagnostic tools, eliminating the slow "guess → push → wait 5-7 min → check" debugging cycle.
+
+## Available Images
+
+| Image | Runtime | Use Case |
+|-------|---------|----------|
+| `ghcr.io/bikramkgupta/debug-python` | Python 3.x | Python/Django/Flask apps |
+| `ghcr.io/bikramkgupta/debug-node` | Node.js 20.x | Node/Express/Next.js apps |
+
+Both images include identical CLI tools and database clients. Choose based on your app's runtime for native library support.
 
 ## Quick Start
 
-### Option 1: Deploy Standalone
+### Deploy Python Debug Container (~30 seconds)
 
 ```bash
-# Clone and deploy
-git clone https://github.com/bikramkgupta/do-app-debug-container.git
-cd do-app-debug-container
-doctl apps create --spec app.yaml
+doctl apps create --spec app-specs/debug-python.yaml
 ```
 
-### Option 2: Add to Existing App
-
-Add the debug container as a worker to your existing app. See `examples/add-to-existing-app.yaml`.
-
-### Option 3: Alpine Quick Deploy (~45 seconds)
-
-For the fastest possible deployment to test infrastructure:
+### Deploy Node.js Debug Container (~30 seconds)
 
 ```bash
-doctl apps create --spec examples/alpine-quick-deploy.yaml
+doctl apps create --spec app-specs/debug-node.yaml
 ```
+
+### Add to Existing App (as a Worker)
+
+Add the debug container as a worker component to test connectivity within your app's network:
+
+```yaml
+workers:
+  - name: debug
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: debug-python  # or debug-node
+      tag: latest
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+```
+
+See `app-specs/debug-worker-python.yaml` or `app-specs/debug-worker-node.yaml` for complete examples.
 
 ## Included Tools
 
+### Database Clients (CLI)
+
+| Database | CLI Tool | Environment Variable |
+|----------|----------|---------------------|
+| PostgreSQL | `psql` | `DATABASE_URL` |
+| MySQL | `mysql` | `MYSQL_URL` |
+| Redis/Valkey | `redis-cli` | `REDIS_URL` |
+| MongoDB | `mongosh` | `MONGODB_URI` |
+| Kafka | `kcat` | `KAFKA_BROKERS` |
+| OpenSearch | `curl + jq` | `OPENSEARCH_URL` |
+
+### Database Libraries
+
+**Python image:**
+- `psycopg2-binary` (PostgreSQL)
+- `pymysql` (MySQL)
+- `redis` (Redis/Valkey)
+- `pymongo` (MongoDB)
+- `confluent-kafka`, `kafka-python-ng` (Kafka)
+- `opensearch-py` (OpenSearch)
+- `boto3` (Spaces/S3)
+
+**Node.js image:**
+- `pg` (PostgreSQL)
+- `mysql2` (MySQL)
+- `ioredis` (Redis/Valkey)
+- `mongodb` (MongoDB)
+- `kafkajs` (Kafka)
+- `@opensearch-project/opensearch` (OpenSearch)
+- `@aws-sdk/client-s3` (Spaces/S3)
+
 ### Network Diagnostics
-- `curl`, `wget` - HTTP client tools
+
+- `curl`, `wget` - HTTP clients
 - `dig`, `nslookup` - DNS lookup
 - `ping`, `traceroute` - Network path testing
-- `netcat (nc)` - TCP/UDP connectivity testing
+- `netcat (nc)` - TCP/UDP connectivity
 - `ss`, `netstat` - Socket statistics
 - `nmap` - Network exploration
 - `tcpdump` - Packet capture
 
-### Database Clients
-- `psql` - PostgreSQL client
-- `mysql` - MySQL client
-- `redis-cli` - Redis client
-
-### Python Libraries
-- `psycopg2` - PostgreSQL adapter
-- `pymysql` - MySQL adapter
-- `redis` - Redis client
-- `requests`, `httpx` - HTTP clients
-- `pymongo` - MongoDB client
-- `boto3` - AWS SDK (for Spaces)
-
 ### System Tools
-- `htop`, `top`, `ps` - Process monitoring
+
+- `htop`, `ps`, `top` - Process monitoring
 - `free`, `df` - Memory and disk usage
-- `lsof` - List open files
-- `strace` - System call tracing
-- `jq` - JSON processor
-- `vim`, `less` - Text editors/viewers
+- `lsof`, `strace` - Debugging
+- `jq` - JSON processing
+- `vim`, `less`, `tmux` - Editors and utilities
 
 ## Usage
 
-### HTTP Diagnostic Endpoints
+### Startup Banner
 
-When deployed as a service, the container exposes these endpoints:
+When the container starts, it displays available commands and detected database connections in the runtime logs:
 
-| Endpoint | Description |
-|----------|-------------|
-| `/` | List all available endpoints |
-| `/health` | Health check (returns `{"status": "healthy"}`) |
-| `/env` | Show environment variables (sensitive values redacted) |
-| `/dns?host=example.com` | DNS lookup for a host |
-| `/connectivity?url=https://api.example.com` | Test HTTP connectivity |
-| `/db/postgres` | Test PostgreSQL (uses `DATABASE_URL`) |
-| `/db/mysql` | Test MySQL (uses `MYSQL_URL`) |
-| `/db/redis` | Test Redis (uses `REDIS_URL`) |
-| `/system` | System resource information |
+```
+================================================================================
+  DigitalOcean App Platform Debug Container
+================================================================================
+
+  Runtime: Python
+  Health Server: http://0.0.0.0:8080
+
+  DIAGNOSTIC SCRIPTS:
+  diagnose.sh              Full system diagnostic report
+  test-db.sh <type>        Database connectivity test
+  test-connectivity.sh     Network connectivity test
+
+  DETECTED DATABASE CONNECTIONS:
+  ✓ DATABASE_URL is set
+  ✓ REDIS_URL is set
+================================================================================
+```
+
+### Diagnostic Scripts
+
+Access the container shell and run:
+
+```bash
+# Full system diagnostic (memory, disk, network, env vars, database checks)
+diagnose.sh
+
+# Test specific database connectivity
+test-db.sh postgres      # Uses $DATABASE_URL
+test-db.sh mysql         # Uses $MYSQL_URL
+test-db.sh redis         # Uses $REDIS_URL (works with Valkey too)
+test-db.sh mongodb       # Uses $MONGODB_URI
+test-db.sh kafka         # Uses $KAFKA_BROKERS
+test-db.sh opensearch    # Uses $OPENSEARCH_URL
+
+# Test network connectivity
+test-connectivity.sh https://api.example.com
+test-connectivity.sh db.example.com 5432
+```
 
 ### Shell Access
-
-Access the container shell using `doctl`:
 
 ```bash
 # List your apps
 doctl apps list
 
-# Get console access
-doctl apps console <app-id> <component-name>
+# Access container shell
+doctl apps console <app-id> debug
 ```
 
-Or use the [do-app-sandbox SDK](https://github.com/digitalocean/do-app-sandbox) for programmatic access.
+### HTTP Endpoints
 
-### Diagnostic Scripts
+When deployed as a service, the container exposes:
 
-Once in the shell, run the included diagnostic scripts:
-
-```bash
-# Full system diagnostic report
-/app/scripts/diagnose.sh
-
-# Test database connectivity
-/app/scripts/test-db.sh postgres
-/app/scripts/test-db.sh mysql
-/app/scripts/test-db.sh redis
-
-# Test network connectivity
-/app/scripts/test-connectivity.sh https://api.example.com
-/app/scripts/test-connectivity.sh db.example.com 5432
-```
-
-### Common Diagnostic Commands
-
-```bash
-# Check memory and disk
-free -m
-df -h
-
-# View running processes
-ps aux
-htop
-
-# Check listening ports
-ss -tlnp
-
-# Test DNS resolution
-dig +short your-database.db.ondigitalocean.com
-
-# Test database connectivity
-pg_isready -h $PGHOST -p $PGPORT
-
-# Test HTTP endpoint
-curl -v https://api.example.com/health
-
-# Check environment variables
-env | sort | grep -i database
-```
+| Endpoint | Description |
+|----------|-------------|
+| `/` | Container info and available scripts |
+| `/health` | Health check (`{"status": "healthy"}`) |
 
 ## Environment Variables
 
-The container respects these environment variables for database testing:
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `POSTGRES_URL` | Alternative PostgreSQL URL |
-| `MYSQL_URL` | MySQL connection string |
-| `REDIS_URL` | Redis connection string |
-| `PORT` | HTTP server port (default: 8080) |
+| Variable | Description | Used By |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `test-db.sh postgres` |
+| `MYSQL_URL` | MySQL connection string | `test-db.sh mysql` |
+| `REDIS_URL` | Redis/Valkey connection string | `test-db.sh redis` |
+| `MONGODB_URI` | MongoDB connection string | `test-db.sh mongodb` |
+| `KAFKA_BROKERS` | Kafka broker addresses (comma-separated) | `test-db.sh kafka` |
+| `OPENSEARCH_URL` | OpenSearch endpoint URL | `test-db.sh opensearch` |
 
 ## Common Issues & Solutions
 
-### "bind: address already in use"
-Your app is trying to use a port that's already bound. Check `PORT` environment variable.
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `bind: address already in use` | Port conflict | Check `PORT` env var |
+| `ECONNREFUSED` | Database not attached | Verify database binding in app spec |
+| `Exit code 137` | Out of memory | Increase instance size |
+| `Health check failed` | App not responding | Debug with this container |
+| `DNS resolution fails` | DNS propagation delay | Wait 1-2 minutes |
 
-### "ECONNREFUSED" to database
-Database not attached or wrong connection string. Verify database binding in app spec.
+## Building Images Locally
 
-### "ModuleNotFoundError"
-Missing Python dependency. Check `requirements.txt`.
+```bash
+# Build Python variant
+docker build --target debug-python -t debug-python .
 
-### Exit code 137
-Out of memory. Increase instance size or optimize memory usage.
+# Build Node.js variant
+docker build --target debug-node -t debug-node .
+```
 
-### "Health check failed"
-Your `/health` endpoint isn't responding. Use this container to debug the endpoint.
+## GitHub Actions
 
-### DNS resolution fails
-Internal DNS might need time to propagate. Wait 1-2 minutes after creating resources.
+Images are automatically built and pushed to GHCR when you:
+1. Push a version tag (e.g., `v1.0.0`)
+2. Manually trigger the workflow
 
-## SDK Prompt Compatibility
-
-The container sets `PS1='\u@\h:\w\$ '` for compatibility with the do-app-sandbox SDK, which uses pexpect to detect command completion.
+See `.github/workflows/build-and-push.yml`.
 
 ## Security Notes
 
-- The `/env` endpoint redacts values for keys containing: KEY, SECRET, PASSWORD, TOKEN, CREDENTIAL
-- Deploy as a worker (not service) in production to avoid public exposure
+- Deploy as a **worker** (not service) in production to avoid public exposure
+- Sensitive environment variables are redacted in diagnostic output
 - Remove the debug container after troubleshooting is complete
+- The container sets `PS1='\u@\h:\w\$ '` for SDK compatibility
+
+## Repository Structure
+
+```
+.
+├── Dockerfile                    # Multi-stage build (Python & Node.js)
+├── health-server/                # Go health server source
+│   ├── main.go
+│   └── go.mod
+├── scripts/
+│   ├── startup.sh                # Container startup with banner
+│   ├── diagnose.sh               # Full diagnostic report
+│   ├── test-db.sh                # Database connectivity tests
+│   └── test-connectivity.sh      # Network connectivity tests
+├── app-specs/
+│   ├── debug-python.yaml         # Standalone Python service
+│   ├── debug-node.yaml           # Standalone Node.js service
+│   ├── debug-worker-python.yaml  # Python worker template
+│   └── debug-worker-node.yaml    # Node.js worker template
+└── .github/workflows/
+    └── build-and-push.yml        # CI/CD for GHCR
+```
 
 ## License
 

@@ -1,7 +1,8 @@
 .git
 .gitignore
 .dockerignore
+.github
 README.md
 LICENSE
-examples/
+app-specs/
 *.md

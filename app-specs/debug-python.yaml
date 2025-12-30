@@ -1,0 +1,50 @@
+# DigitalOcean App Platform - Python Debug Container
+#
+# Deploy in ~30-45 seconds using pre-built image from GHCR
+#
+# Usage:
+#   doctl apps create --spec app-specs/debug-python.yaml
+#
+# Or add to your existing app spec as a worker/service component
+
+name: debug-python
+
+services:
+  - name: debug
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: debug-python
+      tag: latest
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 8080
+    routes:
+      - path: /
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 5
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+
+    # Uncomment and modify to test database connectivity:
+    #
+    # envs:
+    #   - key: DATABASE_URL
+    #     scope: RUN_TIME
+    #     value: ${db.DATABASE_URL}
+    #   - key: REDIS_URL
+    #     scope: RUN_TIME
+    #     value: ${redis.REDIS_URL}
+    #   - key: MONGODB_URI
+    #     scope: RUN_TIME
+    #     value: "mongodb://..."
+    #   - key: KAFKA_BROKERS
+    #     scope: RUN_TIME
+    #     value: "broker1:9092,broker2:9092"
+    #   - key: OPENSEARCH_URL
+    #     scope: RUN_TIME
+    #     value: "https://user:pass@opensearch.example.com:9200"

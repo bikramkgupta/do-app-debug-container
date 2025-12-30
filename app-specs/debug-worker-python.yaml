@@ -1,0 +1,37 @@
+# DigitalOcean App Platform - Python Debug Worker
+#
+# Add this debug container as a WORKER to your existing app.
+# Workers don't have public URLs - access via shell only.
+# This is more secure for production debugging.
+#
+# Usage: Add this worker section to your existing app spec
+
+# Example: Add to your app's workers section
+workers:
+  - name: debug
+    image:
+      registry_type: GHCR
+      registry: bikramkgupta
+      repository: debug-python
+      tag: latest
+    instance_size_slug: basic-xxs
+    instance_count: 1
+
+    # Connect to your databases for testing
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      # Add other database connections as needed:
+      # - key: REDIS_URL
+      #   scope: RUN_TIME
+      #   value: ${redis.REDIS_URL}
+      # - key: MONGODB_URI
+      #   scope: RUN_TIME
+      #   value: ${mongo.DATABASE_URL}
+      # - key: KAFKA_BROKERS
+      #   scope: RUN_TIME
+      #   value: "broker1:9092,broker2:9092"
+      # - key: OPENSEARCH_URL
+      #   scope: RUN_TIME
+      #   value: ${opensearch.OPENSEARCH_URL}
