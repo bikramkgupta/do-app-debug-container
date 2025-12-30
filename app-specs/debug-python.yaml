@@ -30,21 +30,54 @@ services:
       success_threshold: 1
       failure_threshold: 3
 
-    # Uncomment and modify to test database connectivity:
+    # Uncomment and modify to test connectivity:
     #
     # envs:
+    #   #────────────────────────────────────────────────────────────────────
+    #   # DATABASES
+    #   #────────────────────────────────────────────────────────────────────
+    #   # PostgreSQL (DATABASE_URL is the standard for Postgres)
     #   - key: DATABASE_URL
     #     scope: RUN_TIME
     #     value: ${db.DATABASE_URL}
+    #
+    #   # MySQL (use MYSQL_URL to distinguish from Postgres)
+    #   - key: MYSQL_URL
+    #     scope: RUN_TIME
+    #     value: ${mysql.DATABASE_URL}
+    #
+    #   # Redis / Valkey
     #   - key: REDIS_URL
     #     scope: RUN_TIME
-    #     value: ${redis.REDIS_URL}
+    #     value: ${redis.DATABASE_URL}
+    #
+    #   # MongoDB
     #   - key: MONGODB_URI
     #     scope: RUN_TIME
-    #     value: "mongodb://..."
+    #     value: "mongodb://user:pass@host:27017/database"
+    #
+    #   # Kafka
     #   - key: KAFKA_BROKERS
     #     scope: RUN_TIME
     #     value: "broker1:9092,broker2:9092"
+    #
+    #   # OpenSearch
     #   - key: OPENSEARCH_URL
     #     scope: RUN_TIME
     #     value: "https://user:pass@opensearch.example.com:9200"
+    #
+    #   #────────────────────────────────────────────────────────────────────
+    #   # SPACES (S3-Compatible Storage)
+    #   #────────────────────────────────────────────────────────────────────
+    #   - key: SPACES_KEY
+    #     scope: RUN_TIME
+    #     value: "your-spaces-access-key"
+    #   - key: SPACES_SECRET
+    #     scope: RUN_TIME
+    #     value: "your-spaces-secret-key"
+    #   - key: SPACES_ENDPOINT
+    #     scope: RUN_TIME
+    #     value: "nyc3.digitaloceanspaces.com"
+    #   - key: SPACES_BUCKET
+    #     scope: RUN_TIME
+    #     value: "your-bucket-name"
