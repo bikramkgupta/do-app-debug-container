@@ -8,8 +8,9 @@ on:
     inputs:
       tag:
         description: 'Tag for the images (e.g., v1.0.0 or latest)'
-        required: false
+        required: true
         default: 'latest'
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -35,6 +36,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -45,17 +49,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+      - name: Determine image tag
+        id: get-tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use the provided tag
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            # Tag push - extract version from ref
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Using tag: ${TAG}"
 
       - name: Build and push image
         uses: docker/build-push-action@v5
@@ -63,8 +68,14 @@ jobs:
           context: .
           target: ${{ matrix.target }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}:${{ steps.get-tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}:latest
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image_name }}
+            org.opencontainers.image.description=${{ matrix.description }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -76,11 +87,15 @@ jobs:
           echo "**Image:** \`${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.get-tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Description:** ${{ matrix.description }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image_name }}:${{ steps.get-tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   summary:
     needs: build-and-push
@@ -88,7 +103,7 @@ jobs:
     steps:
       - name: Final summary
         run: |
-          echo "# Debug Container Images Published" >> $GITHUB_STEP_SUMMARY
+          echo "# 🚀 Debug Container Images Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Both images have been built and pushed to GitHub Container Registry." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -99,9 +114,20 @@ jobs:
           echo "| debug-python | Python 3.x | \`docker pull ghcr.io/${{ github.repository_owner }}/debug-python:latest\` |" >> $GITHUB_STEP_SUMMARY
           echo "| debug-node | Node.js 20.x | \`docker pull ghcr.io/${{ github.repository_owner }}/debug-node:latest\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Usage in App Platform" >> $GITHUB_STEP_SUMMARY
+          echo "## Usage in DigitalOcean App Platform" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Add to your app spec:" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Deploy (30-45 seconds)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Python debug container" >> $GITHUB_STEP_SUMMARY
+          echo "doctl apps create --spec app-specs/debug-python.yaml" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Node.js debug container" >> $GITHUB_STEP_SUMMARY
+          echo "doctl apps create --spec app-specs/debug-node.yaml" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### App Spec Example" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
           echo "services:" >> $GITHUB_STEP_SUMMARY
           echo "  - name: debug" >> $GITHUB_STEP_SUMMARY
@@ -110,4 +136,13 @@ jobs:
           echo "      registry: ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
           echo "      repository: debug-python  # or debug-node" >> $GITHUB_STEP_SUMMARY
           echo "      tag: latest" >> $GITHUB_STEP_SUMMARY
+          echo "    instance_size_slug: basic-xxs" >> $GITHUB_STEP_SUMMARY
+          echo "    http_port: 8080" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Included Tools" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database clients:** psql, mysql, redis-cli, mongosh, kcat" >> $GITHUB_STEP_SUMMARY
+          echo "- **Network tools:** curl, dig, ping, traceroute, netcat, nmap" >> $GITHUB_STEP_SUMMARY
+          echo "- **DO tools:** doctl CLI (latest)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Storage:** Spaces support (boto3 / @aws-sdk/client-s3)" >> $GITHUB_STEP_SUMMARY
