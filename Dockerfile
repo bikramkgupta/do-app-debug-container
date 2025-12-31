@@ -119,6 +119,11 @@ RUN chmod +x /app/scripts/*.sh 2>/dev/null || true \
     && ln -sf /app/scripts/test-connectivity.sh /usr/local/bin/test-connectivity.sh \
     && ln -sf /app/scripts/test-spaces.sh /usr/local/bin/test-spaces.sh
 
+# Copy validation suite
+COPY validate_infra_d/ /usr/local/bin/validate_infra_d/
+COPY validate-infra /usr/local/bin/validate-infra
+RUN chmod +x /usr/local/bin/validate-infra
+
 # Copy startup script
 COPY scripts/startup.sh /app/startup.sh
 RUN chmod +x /app/startup.sh

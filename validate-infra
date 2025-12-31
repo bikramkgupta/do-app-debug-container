@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""
+validate-infra - Infrastructure Validation Suite for DigitalOcean App Platform
+
+Usage:
+    validate-infra [command] [options]
+
+Commands:
+    all             Run all validations (default)
+    network         Test network connectivity (DNS, HTTPS, registries)
+    database        Test database connections (PostgreSQL, MySQL, MongoDB)
+    cache           Test Redis/Valkey cache
+    kafka           Test Kafka connectivity
+    opensearch      Test OpenSearch cluster
+    spaces          Test DigitalOcean Spaces (S3)
+    gradient        Test Gradient AI (Serverless Inference)
+    env             Validate environment variables
+    trusted-sources Check VPC and trusted sources configuration
+
+Options:
+    -v, --verbose   Show detailed output
+    -h, --help      Show this help message
+    --required VAR1,VAR2  Specify required env vars (for 'env' command)
+
+Examples:
+    validate-infra all                    # Run all checks
+    validate-infra database -v            # Verbose database checks
+    validate-infra env --required DATABASE_URL,REDIS_URL
+"""
+
+import os
+import sys
+
+# Add the validate_infra_d directory to the path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Try multiple locations for the module
+module_locations = [
+    os.path.join(script_dir, 'validate_infra_d'),  # Same directory (development)
+    '/usr/local/bin/validate_infra_d',              # Installed location
+    script_dir,                                      # Script directory itself
+    '/usr/local/bin',                               # Parent directory when installed
+]
+
+for loc in module_locations:
+    if loc not in sys.path and os.path.isdir(loc):
+        sys.path.insert(0, loc)
+
+
+def print_banner():
+    """Print the validation suite banner."""
+    print("""
+╔═══════════════════════════════════════════════════════════════╗
+║     Infrastructure Validation Suite for App Platform          ║
+║                    DigitalOcean Debug Container               ║
+╚═══════════════════════════════════════════════════════════════╝
+""")
+
+
+def print_help():
+    """Print help message."""
+    print(__doc__)
+
+
+def run_all(verbose: bool = False) -> int:
+    """Run all validation checks."""
+    from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env, trusted_sources
+
+    exit_code = 0
+
+    # Run each module
+    modules = [
+        ('Network', network),
+        ('Database', database),
+        ('Cache', cache),
+        ('Kafka', kafka_check),
+        ('OpenSearch', opensearch_check),
+        ('Spaces', spaces),
+        ('Gradient AI', gradient),
+        ('Environment', env),
+        ('Trusted Sources', trusted_sources),
+    ]
+
+    for name, module in modules:
+        try:
+            result = module.run_checks(verbose=verbose)
+            if result != 0:
+                exit_code = 1
+        except Exception as e:
+            print(f"\n[ERROR] {name} validation failed: {e}")
+            exit_code = 1
+
+    return exit_code
+
+
+def main():
+    """Main entry point."""
+    args = sys.argv[1:]
+
+    # Parse options
+    verbose = '-v' in args or '--verbose' in args
+    if '-v' in args:
+        args.remove('-v')
+    if '--verbose' in args:
+        args.remove('--verbose')
+
+    if '-h' in args or '--help' in args:
+        print_help()
+        return 0
+
+    # Get command (default to 'all')
+    command = args[0] if args else 'all'
+
+    # Import modules dynamically to handle import errors gracefully
+    try:
+        if command == 'all':
+            print_banner()
+            # Import all modules
+            try:
+                from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env, trusted_sources as ts
+            except ImportError:
+                # Try relative import
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                import validate_infra_d.network as network
+                import validate_infra_d.database as database
+                import validate_infra_d.cache as cache
+                import validate_infra_d.kafka_check as kafka_check
+                import validate_infra_d.opensearch_check as opensearch_check
+                import validate_infra_d.spaces as spaces
+                import validate_infra_d.gradient as gradient
+                import validate_infra_d.env as env
+                import validate_infra_d.trusted_sources as ts
+
+            exit_code = 0
+
+            modules = [
+                ('Network', network),
+                ('Database', database),
+                ('Cache', cache),
+                ('Kafka', kafka_check),
+                ('OpenSearch', opensearch_check),
+                ('Spaces', spaces),
+                ('Gradient AI', gradient),
+                ('Environment', env),
+                ('Trusted Sources', ts),
+            ]
+
+            for name, module in modules:
+                try:
+                    result = module.run_checks(verbose=verbose)
+                    if result != 0:
+                        exit_code = 1
+                except Exception as e:
+                    print(f"\n[ERROR] {name} validation failed: {e}")
+                    if verbose:
+                        import traceback
+                        traceback.print_exc()
+                    exit_code = 1
+
+            return exit_code
+
+        elif command == 'network':
+            try:
+                from validate_infra_d import network
+            except ImportError:
+                import validate_infra_d.network as network
+            return network.run_checks(verbose=verbose)
+
+        elif command == 'database':
+            try:
+                from validate_infra_d import database
+            except ImportError:
+                import validate_infra_d.database as database
+            # Check for database type argument
+            db_type = None
+            for arg in args[1:]:
+                if arg in ['postgresql', 'mysql', 'mongodb', 'pg', 'postgres', 'mongo']:
+                    db_type = arg
+                    break
+            return database.run_checks(db_type=db_type, verbose=verbose)
+
+        elif command == 'cache':
+            try:
+                from validate_infra_d import cache
+            except ImportError:
+                import validate_infra_d.cache as cache
+            return cache.run_checks(verbose=verbose)
+
+        elif command == 'kafka':
+            try:
+                from validate_infra_d import kafka_check
+            except ImportError:
+                import validate_infra_d.kafka_check as kafka_check
+            return kafka_check.run_checks(verbose=verbose)
+
+        elif command == 'opensearch':
+            try:
+                from validate_infra_d import opensearch_check
+            except ImportError:
+                import validate_infra_d.opensearch_check as opensearch_check
+            return opensearch_check.run_checks(verbose=verbose)
+
+        elif command == 'spaces':
+            try:
+                from validate_infra_d import spaces
+            except ImportError:
+                import validate_infra_d.spaces as spaces
+            return spaces.run_checks(verbose=verbose)
+
+        elif command == 'gradient':
+            try:
+                from validate_infra_d import gradient
+            except ImportError:
+                import validate_infra_d.gradient as gradient
+            return gradient.run_checks(verbose=verbose)
+
+        elif command == 'env':
+            try:
+                from validate_infra_d import env
+            except ImportError:
+                import validate_infra_d.env as env
+
+            # Parse --required
+            required = None
+            for i, arg in enumerate(args):
+                if arg == '--required' and i + 1 < len(args):
+                    required = args[i + 1].split(',')
+                    break
+            return env.run_checks(required=required, verbose=verbose)
+
+        elif command in ['trusted-sources', 'trusted_sources', 'vpc']:
+            try:
+                from validate_infra_d import trusted_sources
+            except ImportError:
+                import validate_infra_d.trusted_sources as trusted_sources
+            return trusted_sources.run_checks(verbose=verbose)
+
+        else:
+            print(f"Unknown command: {command}")
+            print_help()
+            return 1
+
+    except ImportError as e:
+        print(f"[ERROR] Failed to import validation module: {e}")
+        print(f"Make sure validate-infra.d/ is in the same directory as this script")
+        print(f"Script directory: {script_dir}")
+        print(f"Module directory: {module_dir}")
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
