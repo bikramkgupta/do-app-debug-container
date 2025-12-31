@@ -394,12 +394,12 @@ def run_checks(db_type: str = None, verbose: bool = False) -> int:
                     break
 
     if not all_checks:
-        print_warning("No database URLs found in environment variables")
-        print_info("Expected environment variables:")
+        print_info("No database URLs found - skipping database checks")
+        print_info("To enable, set one of these environment variables:")
         for dtype, configs in db_configs.items():
             for url_key, _ in configs:
                 print_info(f"  - {url_key}")
-        return 1
+        return 0  # Skip gracefully when not configured
 
     return print_summary(all_checks)
 

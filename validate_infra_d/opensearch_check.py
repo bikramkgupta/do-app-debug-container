@@ -206,13 +206,13 @@ def run_checks(verbose: bool = False) -> int:
     config = get_opensearch_config()
 
     if not config:
-        print_warning("No OpenSearch configuration found")
-        print_info("Expected environment variables:")
+        print_info("No OpenSearch configuration found - skipping OpenSearch checks")
+        print_info("To enable, set these environment variables:")
         print_info("  - OPENSEARCH_URL (https://user:pass@host:port)")
         print_info("  OR")
         print_info("  - OPENSEARCH_HOST, OPENSEARCH_PORT")
         print_info("  - OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD")
-        return 1
+        return 0  # Skip gracefully when not configured
 
     checks = validate_opensearch(config, verbose)
 

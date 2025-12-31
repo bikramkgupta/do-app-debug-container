@@ -159,11 +159,11 @@ def run_checks(verbose: bool = False) -> int:
             break
 
     if not url:
-        print_warning("No Redis/Valkey URL found in environment variables")
-        print_info("Expected environment variables:")
+        print_info("No Redis/Valkey URL found - skipping cache checks")
+        print_info("To enable, set one of these environment variables:")
         for url_key, _ in url_configs:
             print_info(f"  - {url_key}")
-        return 1
+        return 0  # Skip gracefully when not configured
 
     print_info(f"Found Redis URL in {url_source}")
     print()

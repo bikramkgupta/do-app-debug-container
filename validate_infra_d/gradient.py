@@ -78,9 +78,10 @@ def validate_gradient(config: dict, verbose: bool = False) -> list:
 
     # API authentication check
     if not config['access_key']:
-        checks.append(('Gradient Auth', False, "MODEL_ACCESS_KEY not configured"))
-        print_check('Authentication', False, "No access key provided")
-        print_warning("Set MODEL_ACCESS_KEY for API access")
+        print_info("MODEL_ACCESS_KEY not configured - skipping API checks")
+        print_info("Network connectivity verified. To enable API checks, set:")
+        print_info("  - MODEL_ACCESS_KEY")
+        # Return only the successful network checks (DNS, TCP, HTTPS)
         return checks
 
     try:

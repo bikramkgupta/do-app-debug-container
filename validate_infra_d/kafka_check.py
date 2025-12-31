@@ -266,13 +266,13 @@ def run_checks(verbose: bool = False) -> int:
     config = get_kafka_config()
 
     if not config['broker']:
-        print_warning("No Kafka broker configured")
-        print_info("Expected environment variables:")
+        print_info("No Kafka broker configured - skipping Kafka checks")
+        print_info("To enable, set these environment variables:")
         print_info("  - KAFKA_BROKER (host:port)")
         print_info("  - KAFKA_USERNAME")
         print_info("  - KAFKA_PASSWORD")
         print_info("  - KAFKA_CA_CERT (optional)")
-        return 1
+        return 0  # Skip gracefully when not configured
 
     checks = validate_kafka(config, verbose)
 

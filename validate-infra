@@ -38,8 +38,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 module_locations = [
     os.path.join(script_dir, 'validate_infra_d'),  # Same directory (development)
     '/usr/local/bin/validate_infra_d',              # Installed location
+    '/tmp/validate_infra_d',                        # Temp location for testing
     script_dir,                                      # Script directory itself
     '/usr/local/bin',                               # Parent directory when installed
+    '/tmp',                                          # Temp parent directory
 ]
 
 for loc in module_locations:
@@ -242,9 +244,9 @@ def main():
 
     except ImportError as e:
         print(f"[ERROR] Failed to import validation module: {e}")
-        print(f"Make sure validate-infra.d/ is in the same directory as this script")
+        print(f"Make sure validate_infra_d/ is in the same directory as this script")
         print(f"Script directory: {script_dir}")
-        print(f"Module directory: {module_dir}")
+        print(f"Searched paths: {module_locations}")
         return 1
 
 

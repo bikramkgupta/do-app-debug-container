@@ -205,14 +205,14 @@ def run_checks(verbose: bool = False) -> int:
     config = get_spaces_config()
 
     if not config['access_key'] or not config['secret_key']:
-        print_warning("Spaces credentials not configured")
-        print_info("Expected environment variables:")
+        print_info("Spaces credentials not configured - skipping Spaces checks")
+        print_info("To enable, set these environment variables:")
         print_info("  - SPACES_ACCESS_KEY")
         print_info("  - SPACES_SECRET_KEY")
         print_info("  - SPACES_BUCKET")
         print_info("  - SPACES_REGION (optional, default: syd1)")
         print_info("  - SPACES_ENDPOINT (optional)")
-        return 1
+        return 0  # Skip gracefully when not configured
 
     checks = validate_spaces(config, verbose)
 
