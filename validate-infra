@@ -15,7 +15,6 @@ Commands:
     spaces          Test DigitalOcean Spaces (S3)
     gradient        Test Gradient AI (Serverless Inference)
     env             Validate environment variables
-    trusted-sources Check VPC and trusted sources configuration
 
 Options:
     -v, --verbose   Show detailed output
@@ -66,7 +65,7 @@ def print_help():
 
 def run_all(verbose: bool = False) -> int:
     """Run all validation checks."""
-    from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env, trusted_sources
+    from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env
 
     exit_code = 0
 
@@ -80,7 +79,6 @@ def run_all(verbose: bool = False) -> int:
         ('Spaces', spaces),
         ('Gradient AI', gradient),
         ('Environment', env),
-        ('Trusted Sources', trusted_sources),
     ]
 
     for name, module in modules:
@@ -119,7 +117,7 @@ def main():
             print_banner()
             # Import all modules
             try:
-                from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env, trusted_sources as ts
+                from validate_infra_d import network, database, cache, kafka_check, opensearch_check, spaces, gradient, env
             except ImportError:
                 # Try relative import
                 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -131,7 +129,6 @@ def main():
                 import validate_infra_d.spaces as spaces
                 import validate_infra_d.gradient as gradient
                 import validate_infra_d.env as env
-                import validate_infra_d.trusted_sources as ts
 
             exit_code = 0
 
@@ -144,7 +141,6 @@ def main():
                 ('Spaces', spaces),
                 ('Gradient AI', gradient),
                 ('Environment', env),
-                ('Trusted Sources', ts),
             ]
 
             for name, module in modules:
@@ -229,13 +225,6 @@ def main():
                     required = args[i + 1].split(',')
                     break
             return env.run_checks(required=required, verbose=verbose)
-
-        elif command in ['trusted-sources', 'trusted_sources', 'vpc']:
-            try:
-                from validate_infra_d import trusted_sources
-            except ImportError:
-                import validate_infra_d.trusted_sources as trusted_sources
-            return trusted_sources.run_checks(verbose=verbose)
 
         else:
             print(f"Unknown command: {command}")
