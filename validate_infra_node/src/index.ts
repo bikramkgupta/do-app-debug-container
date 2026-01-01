@@ -91,13 +91,13 @@ async function runAll(verbose: boolean): Promise<number> {
 
   const modules: ModuleInfo[] = [
     { name: 'Network', runChecks: network.runChecks },
-    { name: 'Database', runChecks: database.runChecks },
+    { name: 'Database', runChecks: (v: boolean) => database.runChecks(undefined, v) },
     { name: 'Cache', runChecks: cache.runChecks },
     { name: 'Kafka', runChecks: kafka.runChecks },
     { name: 'OpenSearch', runChecks: opensearch.runChecks },
     { name: 'Spaces', runChecks: spaces.runChecks },
     { name: 'Gradient AI', runChecks: gradient.runChecks },
-    { name: 'Environment', runChecks: env.runChecks },
+    { name: 'Environment', runChecks: (v: boolean) => env.runChecks(undefined, v) },
   ];
 
   for (const module of modules) {

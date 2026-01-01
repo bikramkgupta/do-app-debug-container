@@ -265,8 +265,8 @@ export async function tcpCheck(host: string, port: number, timeout: number = 500
  */
 export async function dnsCheck(hostname: string): Promise<[boolean, string[] | string]> {
   try {
-    const result = await dnsLookup(hostname, { all: true });
-    const ips = Array.isArray(result) ? result.map(r => r.address) : [result.address];
+    const result = await dnsLookup(hostname, { all: true }) as dns.LookupAddress[];
+    const ips = result.map((r: dns.LookupAddress) => r.address);
     return [true, ips];
   } catch (err) {
     const error = err as NodeJS.ErrnoException;
