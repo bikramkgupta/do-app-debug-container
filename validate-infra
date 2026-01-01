@@ -143,17 +143,34 @@ def main():
                 ('Environment', env),
             ]
 
+            failed_modules = []
             for name, module in modules:
                 try:
                     result = module.run_checks(verbose=verbose)
                     if result != 0:
                         exit_code = 1
+                        failed_modules.append(name)
                 except Exception as e:
                     print(f"\n[ERROR] {name} validation failed: {e}")
                     if verbose:
                         import traceback
                         traceback.print_exc()
                     exit_code = 1
+                    failed_modules.append(name)
+
+            # Print final overall summary
+            print("\n" + "=" * 60)
+            print("                    OVERALL RESULT")
+            print("=" * 60)
+            if exit_code == 0:
+                print("\n  \033[0;32m✓ ALL CHECKS PASSED\033[0m\n")
+            else:
+                print(f"\n  \033[0;31m✗ VALIDATION FAILED\033[0m")
+                print(f"\n  Failed modules ({len(failed_modules)}):")
+                for mod in failed_modules:
+                    print(f"    - {mod}")
+                print()
+            print("=" * 60 + "\n")
 
             return exit_code
 
