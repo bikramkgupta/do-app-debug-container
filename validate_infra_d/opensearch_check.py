@@ -124,7 +124,8 @@ def validate_opensearch(config: dict, verbose: bool = False) -> list:
             print_check('List Indices', False, str(e))
 
         # Index operations test
-        test_index = "_validate_infra_test"
+        # Note: OpenSearch doesn't allow index names starting with underscore
+        test_index = "validate-infra-test"
         try:
             # Create index
             if client.indices.exists(index=test_index):
