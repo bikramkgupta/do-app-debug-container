@@ -211,7 +211,22 @@ RUN npm install -g \
     # AWS SDK (for Spaces)
     @aws-sdk/client-s3 \
     # Utilities
-    dotenv
+    dotenv \
+    # TypeScript for building validate-infra
+    typescript
+
+# -----------------------------------------------------------------------------
+# Node.js Infrastructure Validation Suite
+# -----------------------------------------------------------------------------
+# Copy and build the Node.js version of validate-infra
+COPY validate_infra_node/ /usr/local/lib/validate_infra_node/
+WORKDIR /usr/local/lib/validate_infra_node
+RUN npm install && npm run build \
+    && chmod +x /usr/local/lib/validate_infra_node/dist/index.js \
+    && rm -f /usr/local/bin/validate-infra \
+    && ln -sf /usr/local/lib/validate_infra_node/dist/index.js /usr/local/bin/validate-infra
+
+WORKDIR /app
 
 USER debuguser
 CMD ["/app/startup.sh"]
