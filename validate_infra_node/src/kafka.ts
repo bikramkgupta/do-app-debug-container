@@ -145,8 +145,10 @@ async function validateKafka(config: KafkaConfig, verbose: boolean = false): Pro
       logLevel: logLevel.NOTHING,
     });
 
-    // Admin client for metadata
+    // Admin client for metadata and topic management
     const admin = kafka.admin();
+    const testTopic = `_validate_infra_test_${Date.now()}`;
+    let topicCreated = false;
 
     try {
       await admin.connect();
@@ -161,12 +163,29 @@ async function validateKafka(config: KafkaConfig, verbose: boolean = false): Pro
       printCheck('Connection', true, verbose ? `${topics.length} topics available` : undefined);
 
       // List some topics
-      if (topics.length > 0) {
+      if (topics.length > 0 && verbose) {
         const displayTopics = topics.slice(0, 5);
         printInfo(`Topics (first 5): ${displayTopics.join(', ')}`);
       }
 
-      await admin.disconnect();
+      // Create test topic
+      try {
+        await admin.createTopics({
+          topics: [{ topic: testTopic, numPartitions: 1, replicationFactor: 1 }],
+          waitForLeaders: true,
+          timeout: 10000,
+        });
+        topicCreated = true;
+        checks.push({ name: 'Kafka CREATE Topic', passed: true, message: `Created ${testTopic}` });
+        printCheck('CREATE Topic', true);
+      } catch (err) {
+        const error = err as Error;
+        checks.push({ name: 'Kafka CREATE Topic', passed: false, message: error.message });
+        printCheck('CREATE Topic', false, error.message);
+        // Can't continue without topic
+        await admin.disconnect();
+        return checks;
+      }
     } catch (err) {
       const error = err as Error;
       const errorMsg = error.message;
@@ -181,79 +200,75 @@ async function validateKafka(config: KafkaConfig, verbose: boolean = false): Pro
       return checks;
     }
 
-    // Producer test
-    const testTopic = '_validate_infra_test';
+    // Producer test - send a message
+    const testMessage = { key: 'test-key', value: `test-value-${Date.now()}` };
     try {
       const producer = kafka.producer();
       await producer.connect();
 
-      try {
-        await producer.send({
-          topic: testTopic,
-          messages: [{ key: 'test-key', value: 'test-value' }],
-        });
-        checks.push({ name: 'Kafka Produce', passed: true, message: `Produced to ${testTopic}` });
-        printCheck('Produce Message', true);
-      } catch (err) {
-        const error = err as Error;
-        const errorMsg = error.message;
-        // Topic might not exist and auto-create is disabled
-        // Various error messages for this: UNKNOWN_TOPIC, does not exist, does not host this topic-partition
-        if (
-          errorMsg.includes('UNKNOWN_TOPIC') ||
-          errorMsg.includes('does not exist') ||
-          errorMsg.includes('does not host this topic-partition')
-        ) {
-          checks.push({
-            name: 'Kafka Produce',
-            passed: true,
-            message: "Producer working (test topic doesn't exist)",
-          });
-          printCheck('Produce Message', true, verbose ? 'Working (no auto-create)' : undefined);
-        } else {
-          checks.push({ name: 'Kafka Produce', passed: false, message: errorMsg });
-          printCheck('Produce Message', false, errorMsg);
-        }
-      }
+      await producer.send({
+        topic: testTopic,
+        messages: [testMessage],
+      });
+      checks.push({ name: 'Kafka PRODUCE', passed: true, message: 'Message sent' });
+      printCheck('PRODUCE', true);
 
       await producer.disconnect();
     } catch (err) {
       const error = err as Error;
-      checks.push({ name: 'Kafka Produce', passed: false, message: error.message });
-      printCheck('Produce Message', false, error.message);
+      checks.push({ name: 'Kafka PRODUCE', passed: false, message: error.message });
+      printCheck('PRODUCE', false, error.message);
     }
 
-    // Consumer test
+    // Consumer test - consume the message
     try {
-      const consumer = kafka.consumer({ groupId: 'validate-infra-consumer' });
+      const consumer = kafka.consumer({ groupId: `validate-infra-${Date.now()}` });
       await consumer.connect();
+      await consumer.subscribe({ topic: testTopic, fromBeginning: true });
 
-      try {
-        await consumer.subscribe({ topic: testTopic, fromBeginning: false });
-        checks.push({ name: 'Kafka Subscribe', passed: true, message: `Subscribed to ${testTopic}` });
-        printCheck('Subscribe', true);
-      } catch (err) {
-        const error = err as Error;
-        const errorMsg = error.message;
-        // Various error messages for missing topic
-        if (
-          errorMsg.includes('UNKNOWN_TOPIC') ||
-          errorMsg.includes('does not exist') ||
-          errorMsg.includes('does not host this topic-partition')
-        ) {
-          checks.push({ name: 'Kafka Subscribe', passed: true, message: 'Consumer working' });
-          printCheck('Subscribe', true, "Working (test topic doesn't exist)");
-        } else {
-          throw err;
-        }
-      }
+      let messageReceived = false;
+      const consumePromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (!messageReceived) {
+            reject(new Error('Timeout waiting for message'));
+          }
+        }, 10000);
+
+        consumer.run({
+          eachMessage: async ({ message }) => {
+            if (message.value?.toString() === testMessage.value) {
+              messageReceived = true;
+              clearTimeout(timeout);
+              resolve();
+            }
+          },
+        });
+      });
+
+      await consumePromise;
+      checks.push({ name: 'Kafka CONSUME', passed: true, message: 'Message received' });
+      printCheck('CONSUME', true);
 
       await consumer.disconnect();
     } catch (err) {
       const error = err as Error;
-      checks.push({ name: 'Kafka Subscribe', passed: false, message: error.message });
-      printCheck('Subscribe', false, error.message);
+      checks.push({ name: 'Kafka CONSUME', passed: false, message: error.message });
+      printCheck('CONSUME', false, error.message);
     }
+
+    // Cleanup - delete test topic
+    if (topicCreated) {
+      try {
+        await admin.deleteTopics({ topics: [testTopic], timeout: 10000 });
+        printCheck('Cleanup', true, 'Deleted test topic');
+      } catch (err) {
+        // Ignore cleanup errors but log them
+        const error = err as Error;
+        printWarning(`Failed to delete test topic: ${error.message}`);
+      }
+    }
+
+    await admin.disconnect();
   } catch (importErr) {
     checks.push({ name: 'Kafka Driver', passed: false, message: 'kafkajs not installed' });
     printCheck('Driver', false, 'npm install kafkajs');
