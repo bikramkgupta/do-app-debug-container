@@ -83,23 +83,67 @@ def print_summary(checks: list) -> int:
 
 def has_vpc_interface() -> bool:
     """
-    Check if container has VPC network interface.
-    VPC IPs in DigitalOcean start with 10.x.x.x
+    Check if container has VPC network connectivity.
+
+    VPC networking in App Platform happens OUTSIDE the container - the container
+    itself may not have a 10.x.x.x interface. We detect VPC by:
+    1. Checking for 10.x.x.x network interfaces (legacy method)
+    2. Checking if private database hostnames resolve to 10.x.x.x IPs
+
+    Reference: VPC egress IP is obtained via DO API, not from container interfaces.
+    See: doctl apps get <app-id> -o json | jq '.. | .egress_ips? // empty'
     """
+    import socket
+
+    # Method 1: Check network interfaces for 10.x.x.x
     try:
         result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, timeout=5)
-        # Check for 10.x.x.x addresses (DO VPC range)
-        lines = result.stdout.split('\n')
-        for line in lines:
+        for line in result.stdout.split('\n'):
             if 'inet 10.' in line:
                 return True
-        return False
     except Exception:
-        return False
+        pass
+
+    # Method 2: Check if any private URLs resolve to VPC IPs
+    # Look for environment variables with private hostnames
+    private_url_patterns = [
+        'DATABASE_PRIVATE_URL', 'POSTGRES_PRIVATE_URL', 'PG_PRIVATE_URL',
+        'MYSQL_PRIVATE_URL', 'MONGODB_PRIVATE_URI', 'MONGODB_PRIVATE_URL',
+        'REDIS_PRIVATE_URL', 'VALKEY_PRIVATE_URL', 'CACHE_PRIVATE_URL',
+        'OPENSEARCH_PRIVATE_URL', 'KAFKA_PRIVATE_BROKER',
+    ]
+
+    for env_key in private_url_patterns:
+        url = os.environ.get(env_key)
+        if url and 'private-' in url:
+            # Extract hostname from URL
+            try:
+                # Handle various URL formats
+                if '://' in url:
+                    # postgresql://user:pass@private-host:port/db
+                    host_part = url.split('://')[1].split('@')[-1].split(':')[0].split('/')[0]
+                else:
+                    # private-host:port
+                    host_part = url.split(':')[0]
+
+                if host_part.startswith('private-'):
+                    # Resolve the hostname
+                    ip = socket.gethostbyname(host_part)
+                    if ip.startswith('10.'):
+                        return True
+            except Exception:
+                continue
+
+    return False
 
 
 def get_vpc_ip() -> str:
-    """Get the VPC IP address if available."""
+    """
+    Get the VPC IP address if available from network interfaces.
+
+    Note: VPC egress IP may be different and is obtained via DO API:
+    doctl apps get <app-id> -o json | jq -r '.. | .egress_ips? // empty | .[0].ip // empty'
+    """
     try:
         result = subprocess.run(['ip', 'addr'], capture_output=True, text=True, timeout=5)
         lines = result.stdout.split('\n')

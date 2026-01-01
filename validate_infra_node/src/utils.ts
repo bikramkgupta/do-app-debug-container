@@ -7,6 +7,7 @@ import * as net from 'net';
 import * as dns from 'dns';
 import { URL } from 'url';
 import { promisify } from 'util';
+import { execSync } from 'child_process';
 
 const dnsLookup = promisify(dns.lookup);
 const dnsResolve = promisify(dns.resolve);
@@ -120,10 +121,18 @@ export function printSummary(checks: CheckResult[]): number {
 }
 
 /**
- * Check if container has VPC network interface.
- * VPC IPs in DigitalOcean start with 10.x.x.x
+ * Check if container has VPC network connectivity.
+ *
+ * VPC networking in App Platform happens OUTSIDE the container - the container
+ * itself may not have a 10.x.x.x interface. We detect VPC by:
+ * 1. Checking for 10.x.x.x network interfaces (legacy method)
+ * 2. Checking if private database hostnames resolve to 10.x.x.x IPs
+ *
+ * Reference: VPC egress IP is obtained via DO API, not from container interfaces.
+ * See: doctl apps get <app-id> -o json | jq '.. | .egress_ips? // empty'
  */
 export function hasVpcInterface(): boolean {
+  // Method 1: Check network interfaces for 10.x.x.x
   try {
     const interfaces = os.networkInterfaces();
     for (const name in interfaces) {
@@ -136,14 +145,62 @@ export function hasVpcInterface(): boolean {
         }
       }
     }
-    return false;
   } catch {
-    return false;
+    // Continue to method 2
   }
+
+  // Method 2: Check if any private URLs resolve to VPC IPs
+  const privateUrlPatterns = [
+    'DATABASE_PRIVATE_URL', 'POSTGRES_PRIVATE_URL', 'PG_PRIVATE_URL',
+    'MYSQL_PRIVATE_URL', 'MONGODB_PRIVATE_URI', 'MONGODB_PRIVATE_URL',
+    'REDIS_PRIVATE_URL', 'VALKEY_PRIVATE_URL', 'CACHE_PRIVATE_URL',
+    'OPENSEARCH_PRIVATE_URL', 'KAFKA_PRIVATE_BROKER',
+  ];
+
+  for (const envKey of privateUrlPatterns) {
+    const url = process.env[envKey];
+    if (url && url.includes('private-')) {
+      try {
+        // Extract hostname from URL
+        let hostPart: string;
+        if (url.includes('://')) {
+          // postgresql://user:pass@private-host:port/db
+          const afterScheme = url.split('://')[1];
+          const afterAt = afterScheme.includes('@') ? afterScheme.split('@')[1] : afterScheme;
+          hostPart = afterAt.split(':')[0].split('/')[0];
+        } else {
+          // private-host:port
+          hostPart = url.split(':')[0];
+        }
+
+        if (hostPart.startsWith('private-')) {
+          // Resolve the hostname synchronously using getent
+          const result = execSync(`getent hosts ${hostPart} 2>/dev/null || true`, {
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+          // getent output: "10.126.0.5      private-xxx.db.ondigitalocean.com"
+          if (result) {
+            const ip = result.split(/\s+/)[0];
+            if (ip && ip.startsWith('10.')) {
+              return true;
+            }
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
- * Get the VPC IP address if available.
+ * Get the VPC IP address if available from network interfaces.
+ *
+ * Note: VPC egress IP may be different and is obtained via DO API:
+ * doctl apps get <app-id> -o json | jq -r '.. | .egress_ips? // empty | .[0].ip // empty'
  */
 export function getVpcIp(): string | null {
   try {
