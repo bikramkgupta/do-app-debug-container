@@ -40,7 +40,16 @@ async function validatePostgresql(url: string, verbose: boolean = false): Promis
   try {
     const { Client } = await import('pg');
 
-    const client = new Client({ connectionString: url });
+    // Use explicit config instead of connectionString to properly set SSL options
+    // When using connectionString with sslmode=require, pg overrides the ssl option
+    const client = new Client({
+      host: parsed.host,
+      port: parsed.port || undefined,
+      user: parsed.username,
+      password: parsed.password,
+      database: parsed.database,
+      ssl: { rejectUnauthorized: false }, // Required for DO managed databases (self-signed certs)
+    });
 
     try {
       await client.connect();
