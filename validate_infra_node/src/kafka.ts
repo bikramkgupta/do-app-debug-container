@@ -198,7 +198,12 @@ async function validateKafka(config: KafkaConfig, verbose: boolean = false): Pro
         const error = err as Error;
         const errorMsg = error.message;
         // Topic might not exist and auto-create is disabled
-        if (errorMsg.includes('UNKNOWN_TOPIC') || errorMsg.includes('does not exist')) {
+        // Various error messages for this: UNKNOWN_TOPIC, does not exist, does not host this topic-partition
+        if (
+          errorMsg.includes('UNKNOWN_TOPIC') ||
+          errorMsg.includes('does not exist') ||
+          errorMsg.includes('does not host this topic-partition')
+        ) {
           checks.push({
             name: 'Kafka Produce',
             passed: true,
@@ -230,7 +235,12 @@ async function validateKafka(config: KafkaConfig, verbose: boolean = false): Pro
       } catch (err) {
         const error = err as Error;
         const errorMsg = error.message;
-        if (errorMsg.includes('UNKNOWN_TOPIC') || errorMsg.includes('does not exist')) {
+        // Various error messages for missing topic
+        if (
+          errorMsg.includes('UNKNOWN_TOPIC') ||
+          errorMsg.includes('does not exist') ||
+          errorMsg.includes('does not host this topic-partition')
+        ) {
           checks.push({ name: 'Kafka Subscribe', passed: true, message: 'Consumer working' });
           printCheck('Subscribe', true, "Working (test topic doesn't exist)");
         } else {
