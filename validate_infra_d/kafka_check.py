@@ -108,8 +108,11 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
             if ca_cert_path:
                 conf['ssl.ca.location'] = ca_cert_path
 
-            # Admin client for metadata
+            # Admin client for metadata and topic management
             admin = AdminClient(conf)
+            import time
+            test_topic = f"_validate_infra_test_{int(time.time() * 1000)}"
+            topic_created = False
 
             # List topics (tests connectivity)
             try:
@@ -119,9 +122,10 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
                 print_check('Connection', True, f"{topic_count} topics available" if verbose else None)
 
                 # List some topics
-                topics = list(metadata.topics.keys())[:5]
-                if topics:
-                    print_info(f"Topics (first 5): {', '.join(topics)}")
+                if verbose:
+                    topics = list(metadata.topics.keys())[:5]
+                    if topics:
+                        print_info(f"Topics (first 5): {', '.join(topics)}")
 
             except KafkaException as e:
                 error_msg = str(e)
@@ -134,15 +138,36 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
                     print_warning("Check KAFKA_CA_CERT - may need valid CA certificate")
                 return checks
 
-            # Producer test
-            test_topic = "_validate_infra_test"
+            # Create test topic
+            try:
+                new_topic = NewTopic(test_topic, num_partitions=1, replication_factor=1)
+                futures = admin.create_topics([new_topic], operation_timeout=10)
+
+                # Wait for topic creation
+                for topic, future in futures.items():
+                    future.result()  # Raises exception on failure
+
+                topic_created = True
+                checks.append(('Kafka CREATE Topic', True, f"Created {test_topic}"))
+                print_check('CREATE Topic', True)
+
+                # Give the cluster a moment to propagate topic metadata
+                time.sleep(1)
+
+            except Exception as e:
+                error_msg = str(e)
+                checks.append(('Kafka CREATE Topic', False, error_msg))
+                print_check('CREATE Topic', False, error_msg)
+                return checks
+
+            # Producer test - send a message
+            test_message_value = f"test-value-{int(time.time() * 1000)}"
             try:
                 producer_conf = conf.copy()
                 producer_conf['client.id'] = 'validate-infra-producer'
 
                 producer = Producer(producer_conf)
 
-                # Try to produce a message (will create topic if auto-create is enabled)
                 delivered = [False]
                 error_holder = [None]
 
@@ -155,60 +180,84 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
                 producer.produce(
                     test_topic,
                     key='test-key',
-                    value='test-value',
+                    value=test_message_value,
                     callback=delivery_callback
                 )
                 producer.flush(timeout=10)
 
                 if delivered[0]:
-                    checks.append(('Kafka Produce', True, f"Produced to {test_topic}"))
-                    print_check('Produce Message', True)
+                    checks.append(('Kafka PRODUCE', True, "Message sent"))
+                    print_check('PRODUCE', True)
                 elif error_holder[0]:
-                    # Topic might not exist and auto-create is disabled
                     error_msg = str(error_holder[0])
-                    if 'UNKNOWN_TOPIC' in error_msg:
-                        checks.append(('Kafka Produce', True, "Producer working (test topic doesn't exist)"))
-                        print_check('Produce Message', True, "Working (no auto-create)" if verbose else None)
-                    else:
-                        checks.append(('Kafka Produce', False, error_msg))
-                        print_check('Produce Message', False, error_msg)
+                    checks.append(('Kafka PRODUCE', False, error_msg))
+                    print_check('PRODUCE', False, error_msg)
+                else:
+                    checks.append(('Kafka PRODUCE', False, "Message not acknowledged"))
+                    print_check('PRODUCE', False, "Message not acknowledged")
 
             except Exception as e:
-                checks.append(('Kafka Produce', False, str(e)))
-                print_check('Produce Message', False, str(e))
+                checks.append(('Kafka PRODUCE', False, str(e)))
+                print_check('PRODUCE', False, str(e))
 
-            # Consumer test
+            # Consumer test - consume the message
             try:
                 consumer_conf = conf.copy()
-                consumer_conf['group.id'] = 'validate-infra-consumer'
-                consumer_conf['auto.offset.reset'] = 'latest'
+                consumer_conf['group.id'] = f'validate-infra-{int(time.time() * 1000)}'
+                consumer_conf['auto.offset.reset'] = 'earliest'
                 consumer_conf['enable.auto.commit'] = False
 
                 consumer = Consumer(consumer_conf)
+                consumer.subscribe([test_topic])
 
-                # Just try to subscribe - don't actually consume
-                try:
-                    consumer.subscribe([test_topic])
-                    checks.append(('Kafka Subscribe', True, f"Subscribed to {test_topic}"))
-                    print_check('Subscribe', True)
-                except Exception as e:
-                    if 'UNKNOWN_TOPIC' in str(e):
-                        checks.append(('Kafka Subscribe', True, "Consumer working"))
-                        print_check('Subscribe', True, "Working (test topic doesn't exist)")
-                    else:
-                        raise
+                # Poll for messages with timeout
+                message_received = False
+                start_time = time.time()
+                timeout_seconds = 15
+
+                while time.time() - start_time < timeout_seconds:
+                    msg = consumer.poll(timeout=1.0)
+                    if msg is None:
+                        continue
+                    if msg.error():
+                        if msg.error().code() == KafkaError._PARTITION_EOF:
+                            continue
+                        else:
+                            raise KafkaException(msg.error())
+
+                    if msg.value() and msg.value().decode('utf-8') == test_message_value:
+                        message_received = True
+                        break
 
                 consumer.close()
 
+                if message_received:
+                    checks.append(('Kafka CONSUME', True, "Message received"))
+                    print_check('CONSUME', True)
+                else:
+                    checks.append(('Kafka CONSUME', False, "Timeout waiting for message"))
+                    print_check('CONSUME', False, "Timeout waiting for message")
+
             except Exception as e:
-                checks.append(('Kafka Subscribe', False, str(e)))
-                print_check('Subscribe', False, str(e))
+                checks.append(('Kafka CONSUME', False, str(e)))
+                print_check('CONSUME', False, str(e))
+
+            # Cleanup - delete test topic
+            if topic_created:
+                try:
+                    futures = admin.delete_topics([test_topic], operation_timeout=10)
+                    for topic, future in futures.items():
+                        future.result()
+                    print_check('Cleanup', True, "Deleted test topic")
+                except Exception as e:
+                    print_warning(f"Failed to delete test topic: {e}")
 
         except ImportError:
             # Fall back to kafka-python-ng
             from kafka import KafkaConsumer, KafkaProducer, KafkaAdminClient
             from kafka.admin import NewTopic as KafkaTopic
             from kafka.errors import KafkaError
+            import time
 
             ssl_context = None
             if config['ca_cert']:
@@ -216,6 +265,9 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
                 ca_cert_path = write_ca_cert(config['ca_cert'])
                 ssl_context = ssl.create_default_context()
                 ssl_context.load_verify_locations(ca_cert_path)
+
+            test_topic = f"_validate_infra_test_{int(time.time() * 1000)}"
+            topic_created = False
 
             # Admin client
             admin = KafkaAdminClient(
@@ -228,10 +280,85 @@ def validate_kafka(config: dict, verbose: bool = False) -> list:
                 request_timeout_ms=10000,
             )
 
-            # List topics
+            # List topics (tests connectivity)
             topics = admin.list_topics()
             checks.append(('Kafka Connection', True, f"Connected, {len(topics)} topics"))
             print_check('Connection', True, f"{len(topics)} topics" if verbose else None)
+
+            # Create test topic
+            try:
+                new_topic = KafkaTopic(name=test_topic, num_partitions=1, replication_factor=1)
+                admin.create_topics([new_topic])
+                topic_created = True
+                checks.append(('Kafka CREATE Topic', True, f"Created {test_topic}"))
+                print_check('CREATE Topic', True)
+                time.sleep(1)
+            except Exception as e:
+                checks.append(('Kafka CREATE Topic', False, str(e)))
+                print_check('CREATE Topic', False, str(e))
+                admin.close()
+                return checks
+
+            # Producer test
+            test_message_value = f"test-value-{int(time.time() * 1000)}"
+            try:
+                producer = KafkaProducer(
+                    bootstrap_servers=f"{host}:{port}",
+                    security_protocol='SASL_SSL',
+                    sasl_mechanism='SCRAM-SHA-256',
+                    sasl_plain_username=config['username'],
+                    sasl_plain_password=config['password'],
+                    ssl_context=ssl_context,
+                )
+                future = producer.send(test_topic, key=b'test-key', value=test_message_value.encode())
+                future.get(timeout=10)
+                producer.close()
+                checks.append(('Kafka PRODUCE', True, "Message sent"))
+                print_check('PRODUCE', True)
+            except Exception as e:
+                checks.append(('Kafka PRODUCE', False, str(e)))
+                print_check('PRODUCE', False, str(e))
+
+            # Consumer test
+            try:
+                consumer = KafkaConsumer(
+                    test_topic,
+                    bootstrap_servers=f"{host}:{port}",
+                    security_protocol='SASL_SSL',
+                    sasl_mechanism='SCRAM-SHA-256',
+                    sasl_plain_username=config['username'],
+                    sasl_plain_password=config['password'],
+                    ssl_context=ssl_context,
+                    auto_offset_reset='earliest',
+                    consumer_timeout_ms=15000,
+                    group_id=f'validate-infra-{int(time.time() * 1000)}',
+                )
+
+                message_received = False
+                for msg in consumer:
+                    if msg.value and msg.value.decode('utf-8') == test_message_value:
+                        message_received = True
+                        break
+
+                consumer.close()
+
+                if message_received:
+                    checks.append(('Kafka CONSUME', True, "Message received"))
+                    print_check('CONSUME', True)
+                else:
+                    checks.append(('Kafka CONSUME', False, "Message not found"))
+                    print_check('CONSUME', False, "Message not found")
+            except Exception as e:
+                checks.append(('Kafka CONSUME', False, str(e)))
+                print_check('CONSUME', False, str(e))
+
+            # Cleanup
+            if topic_created:
+                try:
+                    admin.delete_topics([test_topic])
+                    print_check('Cleanup', True, "Deleted test topic")
+                except Exception as e:
+                    print_warning(f"Failed to delete test topic: {e}")
 
             admin.close()
 
